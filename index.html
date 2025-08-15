@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GrowMyBusinessToday.Com</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+body {
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    padding-top: 60px; /* space for fixed header */
+    background: #f4f6f8;
+    color: #333;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: #006400; /* dark green */
+    color: white;
+    font-weight: bold;
+    z-index: 1000;
+    text-align: center;
+    padding: 12px 20px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+header a {
+    color: white;
+    text-decoration: none;
+}
+.controls {
+    background: white;
+    margin: 20px;
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 95%;
+    max-width: 900px;
+}
+input, select, button {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+}
+button {
+    background: #0984e3;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+button:hover {
+    background: #0868b4;
+}
+.preview-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 95%;
+    max-width: 900px;
+}
+#mainCanvas {
+    background: white;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    width: 100%;
+    max-width: 600px;
+    height: auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.thumbs {
+    display: flex;
+    overflow-x: auto;
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 15px;
+    padding-bottom: 5px;
+}
+.thumbs img {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+.thumbs img.selected {
+    outline: 4px solid #0984e3;
+    outline-offset: 2px;
+}
+.thumbs img:hover {
+    transform: scale(1.05);
+}
+@media (max-width: 600px) {
+    .controls {
+        align-items: stretch;
+    }
+}
+</style>
+</head>
+<body>
+
+<header>
+    <a href="https://growmybusinesstoday.com/" target="_blank">GrowMyBusinessToday.Com</a>
+</header>
+
+<div class="controls">
+    <input type="file" id="imageInput" multiple accept="image/*">
+    <input type="text" id="companyName" placeholder="Type company name">
+    <input type="file" id="logoInput" accept="image/*">
+    <label for="logoSize" style="font-size:14px;">Logo Size</label>
+    <input type="range" id="logoSize" min="10" max="200" value="100">
+
+    <!-- Font size & family, Text & Border color in one row -->
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
+        <input type="number" id="fontSize" placeholder="Size" value="50" min="10" max="200" style="width:50px; padding:5px">
+        <select id="fontFamily" style="padding:5px; font-size:13px;">
+            <option value="Arial">Arial</option>
+            <option value="Inter">Inter</option>
+            <option value="Verdana">Verdana</option>
+            <option value="Georgia">Georgia</option>
+        </select>
+        <div style="display:flex; gap:5px; align-items:center;">
+            <label for="fontColor">Text</label>
+            <input type="color" id="fontColor" value="#ffffff" title="Text Color">
+            <label for="borderColor">Border</label>
+            <input type="color" id="borderColor" value="#0984e3" title="Border Color">
+        </div>
+    </div>
+
+    <!-- Bold, Italic, Download in one row -->
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap; margin-top:5px;">
+        <label><input type="checkbox" id="boldText"> Bold</label>
+        <label><input type="checkbox" id="italicText"> Italic</label>
+        <button id="downloadBtn" style="padding:6px 10px; font-size:14px;">Download</button>
+    </div>
+</div>
+
+<div class="preview-area">
+    <div class="thumbs" id="thumbnailContainer"></div>
+    <canvas id="mainCanvas" width="600" height="600"></canvas>
+</div>
+
+<script>
+let images = [];
+let selectedImageIndex = -1;
+let textPosition = { x: 300, y: 300 };
+let isDragging = false;
+let offset = { x: 0, y: 0 };
+let logoImage = null;
+let logoPos = { x: 300, y: 300 };
+let logoScale = 100;
+
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+const imageInput = document.getElementById('imageInput');
+const companyNameInput = document.getElementById('companyName');
+const fontSizeInput = document.getElementById('fontSize');
+const fontFamilySelect = document.getElementById('fontFamily');
+const fontColorInput = document.getElementById('fontColor');
+const borderColorInput = document.getElementById('borderColor');
+const boldTextCheckbox = document.getElementById('boldText');
+const italicTextCheckbox = document.getElementById('italicText');
+const downloadBtn = document.getElementById('downloadBtn');
+const thumbnailContainer = document.getElementById('thumbnailContainer');
+const logoInput = document.getElementById('logoInput');
+const logoSizeInput = document.getElementById('logoSize');
+
+// Load server images
+const imageFolder = 'images/';
+const totalImages = 10;
+for(let i=1;i<=totalImages;i++){
+    const img = new Image();
+    img.src = imageFolder + i + '.jpg';
+    img.onload = () => {
+        images.push({ img, offset:{x:0,y:0} });
+        createThumbnail(img.src, images.length-1);
+        if(selectedImageIndex===-1){selectedImageIndex=0; drawCanvas();}
+    };
+}
+
+// Upload images
+imageInput.addEventListener('change', e=>{
+    Array.from(e.target.files).forEach(file=>{
+        const reader = new FileReader();
+        reader.onload = event=>{
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = ()=>{
+                images.push({ img, offset:{x:0,y:0} });
+                createThumbnail(event.target.result, images.length-1);
+                selectedImageIndex = images.length-1;
+                drawCanvas();
+            };
+        };
+        reader.readAsDataURL(file);
+    });
+});
+
+// Upload logo
+logoInput.addEventListener('change', e=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = event=>{
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = ()=>{
+            logoImage = img;
+            drawCanvas();
+        };
+    };
+    reader.readAsDataURL(file);
+});
+
+// Logo size slider
+logoSizeInput.addEventListener('input', e=>{
+    logoScale = parseInt(e.target.value,10);
+    drawCanvas();
+});
+
+// Thumbnails
+function createThumbnail(src,index){
+    const thumb = document.createElement('img');
+    thumb.src = src;
+    thumb.addEventListener('click', ()=>{
+        selectedImageIndex=index;
+        drawCanvas();
+        document.querySelectorAll('.thumbs img').forEach(t=>t.classList.remove('selected'));
+        thumb.classList.add('selected');
+    });
+    thumbnailContainer.appendChild(thumb);
+    if(index===0) thumb.classList.add('selected');
+}
+
+// Draw canvas
+function drawCanvas(){
+    if(selectedImageIndex<0 || !images[selectedImageIndex]) return;
+    const img = images[selectedImageIndex].img;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img, 0,0,canvas.width,canvas.height);
+
+    if(logoImage){
+        let scale = logoScale / 100;
+        let logoWidth = logoImage.width * scale;
+        let logoHeight = logoImage.height * scale;
+        ctx.drawImage(logoImage, logoPos.x - logoWidth/2, logoPos.y - logoHeight/2, logoWidth, logoHeight);
+    } else if(companyNameInput.value){
+        const fontWeight = boldTextCheckbox.checked?'bold':'normal';
+        const fontStyle = italicTextCheckbox.checked?'italic':'normal';
+        const fontSize = parseInt(fontSizeInput.value,10);
+        const fontFamily = fontFamilySelect.value;
+        ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const text = companyNameInput.value;
+        const padding = 10;
+        const textMetrics = ctx.measureText(text);
+        const rectWidth = textMetrics.width + padding*2;
+        const rectHeight = fontSize + padding*2;
+        const rectX = textPosition.x - rectWidth/2;
+        const rectY = textPosition.y - rectHeight/2;
+
+        ctx.fillStyle = 'rgba(0,0,0,0)';
+        ctx.strokeStyle = borderColorInput.value;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(rectX, rectY, rectWidth, rectHeight);
+
+        ctx.fillStyle = fontColorInput.value;
+        ctx.fillText(text, textPosition.x, textPosition.y);
+    }
+}
+
+// Convert touch/mouse to canvas coords
+function getCanvasCoords(e){
+    const rect = canvas.getBoundingClientRect();
+    let clientX, clientY;
+    if(e.touches) { clientX=e.touches[0].clientX; clientY=e.touches[0].clientY; }
+    else { clientX=e.clientX; clientY=e.clientY; }
+    return {
+        x: (clientX - rect.left)*(canvas.width/rect.width),
+        y: (clientY - rect.top)*(canvas.height/rect.height)
+    };
+}
+
+// Check if inside text or logo
+function isInsideTextOrLogo(pos){
+    if(logoImage){
+        let scale = logoScale / 100;
+        let w = logoImage.width * scale;
+        let h = logoImage.height * scale;
+        return pos.x >= logoPos.x - w/2 && pos.x <= logoPos.x + w/2 &&
+               pos.y >= logoPos.y - h/2 && pos.y <= logoPos.y + h/2;
+    } else if(companyNameInput.value){
+        const fontSize = parseInt(fontSizeInput.value,10);
+        const padding = 10;
+        const textMetrics = ctx.measureText(companyNameInput.value);
+        const rectWidth = textMetrics.width + padding*2;
+        const rectHeight = fontSize + padding*2;
+        return pos.x >= textPosition.x - rectWidth/2 &&
+               pos.x <= textPosition.x + rectWidth/2 &&
+               pos.y >= textPosition.y - rectHeight/2 &&
+               pos.y <= textPosition.y + rectHeight/2;
+    }
+    return false;
+}
+
+// Dragging
+canvas.addEventListener('mousedown', e=>{
+    const pos = getCanvasCoords(e);
+    if(isInsideTextOrLogo(pos)){
+        isDragging=true;
+        offset.x = logoImage ? pos.x - logoPos.x : pos.x - textPosition.x;
+        offset.y = logoImage ? pos.y - logoPos.y : pos.y - textPosition.y;
+    }
+});
+canvas.addEventListener('mousemove', e=>{
+    if(!isDragging) return;
+    const pos = getCanvasCoords(e);
+    if(logoImage){
+        logoPos.x = pos.x - offset.x;
+        logoPos.y = pos.y - offset.y;
+    } else {
+        textPosition.x = pos.x - offset.x;
+        textPosition.y = pos.y - offset.y;
+    }
+    drawCanvas();
+});
+canvas.addEventListener('mouseup', ()=>{ isDragging=false; });
+
+// Mobile
+canvas.addEventListener('touchstart', e=>{
+    e.preventDefault();
+    const pos = getCanvasCoords(e);
+    if(isInsideTextOrLogo(pos)){
+        isDragging=true;
+        offset.x = logoImage ? pos.x - logoPos.x : pos.x - textPosition.x;
+        offset.y = logoImage ? pos.y - logoPos.y : pos.y - textPosition.y;
+    }
+});
+canvas.addEventListener('touchmove', e=>{
+    e.preventDefault();
+    if(!isDragging) return;
+    const pos = getCanvasCoords(e);
+    if(logoImage){
+        logoPos.x = pos.x - offset.x;
+        logoPos.y = pos.y - offset.y;
+    } else {
+        textPosition.x = pos.x - offset.x;
+        textPosition.y = pos.y - offset.y;
+    }
+    drawCanvas();
+});
+canvas.addEventListener('touchend', e=>{ isDragging=false; });
+canvas.addEventListener('touchcancel', e=>{ isDragging=false; });
+
+// Inputs
+[companyNameInput,fontSizeInput,fontFamilySelect,fontColorInput,borderColorInput,boldTextCheckbox,italicTextCheckbox].forEach(el=>el.addEventListener('input', drawCanvas));
+
+// Download
+downloadBtn.addEventListener('click', ()=>{
+    drawCanvas();
+    const link=document.createElement('a');
+    link.download='image_with_text_or_logo.png';
+    link.href=canvas.toDataURL('image/png');
+    link.click();
+});
+</script>
+
+</body>
+</html>
